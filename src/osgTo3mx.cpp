@@ -4,7 +4,7 @@ namespace seed
 {
 	namespace io
 	{
-		bool OsgTo3mx::Convert(const std::string&input, const std::string& output)
+		bool OsgTo3mx::Convert(const std::string& input, const std::string& output)
 		{
 			std::string inputMetadata = input + "/metadata.xml";
 			std::string inputData = input + "/Data/";
@@ -89,7 +89,7 @@ namespace seed
 			return true;
 		}
 
-		bool OsgTo3mx::ConvertMetadataTo3mx(const std::string&input, const std::string& outputDataRootRelative, const std::string& output)
+		bool OsgTo3mx::ConvertMetadataTo3mx(const std::string& input, const std::string& outputDataRootRelative, const std::string& output)
 		{
 			std::string srs;
 			osg::Vec3d srsOrigin(0, 0, 0);
@@ -157,24 +157,172 @@ namespace seed
 
 		bool OsgTo3mx::ConvertTile(const std::string& inputData, const std::string& outputData, const std::string& tileName, osg::BoundingBox& bb)
 		{
-			std::string inputOsgb = inputData + tileName + "/" + tileName + ".osgb";
-			std::string output3mxb = outputData + tileName + "/" + tileName + ".3mxb";
+			std::string inputTile = inputData + tileName + "/";
+			std::string outputTile = outputData + tileName + "/";
+			if (!utils::CheckOrCreateFolder(outputTile))
+			{
+				seed::log::DumpLog(seed::log::Critical, "Create folder %s failed!", outputTile.c_str());
+				return false;
+			}
+			// top level
+			{
+				std::string inputOsgb = inputTile + tileName + ".osgb";
+				std::string output3mxb = outputTile + tileName + ".3mxb";
+				if (!ConvertOsgbTo3mxb(inputOsgb, output3mxb, &bb))
+				{
+					seed::log::DumpLog(seed::log::Critical, "Convert %s failed!", inputOsgb.c_str());
+					return false;
+				}
+			}
+			// all other
+			osgDB::DirectoryContents fileNames = osgDB::getDirectoryContents(inputTile);
+			for each (std::string file in fileNames)
+			{
+				std::string ext = osgDB::getLowerCaseFileExtension(file);
+				if (ext != "osgb")
+					continue;
 
+				std::string baseName = osgDB::getNameLessExtension(file);
+				if (baseName == tileName)
+					continue;
+
+				std::string inputOsgb = inputTile + baseName + ".osgb";
+				std::string output3mxb = outputTile + baseName + ".3mxb";
+
+				if (!ConvertOsgbTo3mxb(inputOsgb, output3mxb))
+				{
+					seed::log::DumpLog(seed::log::Critical, "Convert %s failed!", inputOsgb.c_str());
+					return false;
+				}
+			}
 
 			return true;
 		}
 
-		bool OsgTo3mx::ConvertOsgbTo3mxb(const std::string&input, const std::string& output)
+		void OsgTo3mx::ParsePagedLOD(osg::PagedLOD* lod, int index, Node& node, Resource& resGeometry, Resource& resTexture)
 		{
-			// TODO: handle osg::PagedLOD, osg::Group, osg::Geode
+			osg::BoundingBox bb;
+			bb.expandBy(lod->getBound());
 
-			// check resource type and format
+			node.id = "node" + std::to_string(index);
+			node.bb = bb;
+			node.maxScreenDiameter = lod->getRangeList().size() >= 2 ? lod->getRangeList()[1].first : 0;
+			if (lod->getNumFileNames() >= 2)
+			{
+				std::string baseName = osgDB::getNameLessExtension(lod->getFileName(1));
+				node.children.push_back(baseName + ".3mxb");
+			}
+			node.resources.push_back("geometry" + std::to_string(index));
+			
+			if (!lod->getNumChildren())
+			{
+				return;
+			}
+			if (lod->getNumChildren() > 1)
+			{
+				seed::log::DumpLog(seed::log::Warning, "PagedLOD has more than 1 Geode!");
+			}
+			osg::Geode* geode = lod->getChild(0)->asGeode();
+			if (!geode)
+			{
+				return;
+			}
+			ParseGeode(geode, index, resGeometry, resTexture);
+		}
 
-			//if (resource.type != "textureBuffer" && resource.type != "geometryBuffer")
-			//{
-			//	seed::log::DumpLog(seed::log::Critical, "Resource type %s is NOT supported!", resource.type.c_str());
-			//}
+		void OsgTo3mx::ParseGeode(osg::Geode* geode, int index, Resource& resGeometry, Resource& resTexture)
+		{
+			osg::BoundingBox bb;
+			bb.expandBy(geode->getBound());
 
+			resTexture.type = "textureBuffer";
+			resTexture.format = "jpg";
+			resTexture.id = "texture" + std::to_string(index);
+			//resTexture.bufferData; // TODO
+
+			resGeometry.type = "geometryBuffer";
+			resGeometry.format = "ctm";
+			resGeometry.id = "geometry" + std::to_string(index);
+			resGeometry.texture = "texture" + std::to_string(index);
+			resGeometry.bb = bb;
+			//resGeometry.bufferData; // TODO
+		}
+
+		bool OsgTo3mx::ConvertOsgbTo3mxb(const std::string& input, const std::string& output, osg::BoundingBox* pbb)
+		{
+			//seed::log::DumpLog(seed::log::Debug, "Convert %s ...", input.c_str());
+			std::vector<Node> nodes;
+			std::vector<Resource> resources;
+			osg::ref_ptr<osg::Node> osgNode = osgDB::readNodeFile(input);
+			if (dynamic_cast<osg::PagedLOD*>(osgNode.get()))
+			{
+				// 1 node (1 child, 1 geometryBuffer, 1 textureBuffer)
+				int i = 0;
+				osg::PagedLOD* lod = dynamic_cast<osg::PagedLOD*>(osgNode.get());
+
+				Node node;
+				Resource resGeometry;
+				Resource resTexture;
+
+				ParsePagedLOD(lod, i, node, resGeometry, resTexture);
+
+				nodes.emplace_back(node);
+				resources.emplace_back(resTexture);
+				resources.emplace_back(resGeometry);
+			}
+			else if (osgNode->asGroup())
+			{
+				// 4 node (1 child, 1 geometryBuffer, 1 textureBuffer)
+				osg::Group* group = osgNode->asGroup();
+				for (int i = 0; i < group->getNumChildren(); ++i)
+				{
+					if (dynamic_cast<osg::PagedLOD*>(group->getChild(i)))
+					{
+						osg::PagedLOD* lod = dynamic_cast<osg::PagedLOD*>(group->getChild(i));
+
+						Node node;
+						Resource resGeometry;
+						Resource resTexture;
+
+						ParsePagedLOD(lod, i, node, resGeometry, resTexture);
+
+						nodes.emplace_back(node);
+						resources.emplace_back(resGeometry);
+						resources.emplace_back(resTexture);
+					}
+				}
+			}
+			else if (osgNode->asGeode())
+			{
+				// 1 node (0 child, 1 geometryBuffer, 1 textureBuffer)
+				int i = 0;
+				osg::Geode* geode = osgNode->asGeode();
+				osg::BoundingBox bb;
+				bb.expandBy(geode->getBound());
+
+				Node node;
+				Resource resGeometry;
+				Resource resTexture;
+
+				node.id = "node" + std::to_string(i);
+				node.bb = bb;
+				node.maxScreenDiameter = 1e30;
+
+				ParseGeode(geode, i, resGeometry, resTexture);
+
+				nodes.emplace_back(node);
+				resources.emplace_back(resGeometry);
+				resources.emplace_back(resTexture);
+			}
+			else
+			{
+				return false;
+			}
+
+			if(!Generate3mxb(nodes, resources, output))
+			{
+				return false;
+			}
 
 			return true;
 		}

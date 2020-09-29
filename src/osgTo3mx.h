@@ -15,9 +15,11 @@
 #include <osg/LineWidth>
 #include <osg/Point>
 #include <osgDB/ReaderWriter>
+#include <osgDB/ReadFile>
 #include <osgDB/WriteFile>
 #include <osgDB/FileUtils>
 #include <osgDB/XmlParser>
+#include <osgDB/FileNameUtils>
 
 namespace seed
 {
@@ -54,14 +56,18 @@ namespace seed
 			bool Convert(const std::string&input, const std::string& output);
 
 		private:
-			bool ConvertMetadataTo3mx(const std::string&input, const std::string& outputDataRootRelative, const std::string& output);
-			bool ConvertOsgbTo3mxb(const std::string&input, const std::string& output, osg::BoundingBox& bb);
+			bool ConvertMetadataTo3mx(const std::string& input, const std::string& outputDataRootRelative, const std::string& output);
+			bool ConvertTile(const std::string& inputData, const std::string& outputData, const std::string& tileName, osg::BoundingBox& bb);
+			bool ConvertOsgbTo3mxb(const std::string& input, const std::string& output, osg::BoundingBox* pbb = nullptr);
 
 			bool GenerateMetadata(const std::string& output);
 			bool Generate3mxb(const std::vector<Node>& nodes, const std::vector<Resource>& resources, const std::string& output);
 
 			neb::CJsonObject NodeToJson(const Node& node);
 			neb::CJsonObject ResourceToJson(const Resource& resource);
+
+			void ParsePagedLOD(osg::PagedLOD* lod, int index, Node& node, Resource& resGeometry, Resource& resTexture);
+			void ParseGeode(osg::Geode* geode, int index, Resource& resGeometry, Resource& resTexture);
 		};
 	}
 }
