@@ -13,11 +13,11 @@ int main(int argc, char** argv)
 	configure_parser(parser);
 	parser.run_and_exit_if_error();
 
-	seed::log::DumpLog(seed::log::Debug, "Process started...");
+	seed::log::DumpLog(seed::log::Info, "Process started...");
 	seed::io::OsgTo3mx osgTo3mx;
 	if (osgTo3mx.Convert(parser.get<std::string>("i"), parser.get<std::string>("o")))
 	{
-		seed::log::DumpLog(seed::log::Debug, "Process succeed!");
+		seed::log::DumpLog(seed::log::Info, "Process succeed!");
 	}
 	else
 	{
