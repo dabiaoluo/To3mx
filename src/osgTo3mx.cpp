@@ -1,4 +1,6 @@
 #include "osgTo3mx.h"
+#include <execution>
+#include <mutex>
 
 namespace seed
 {
@@ -38,15 +40,43 @@ namespace seed
 				return false;
 			}
 
-			std::vector<Node> nodes;
-			std::vector<Resource> resources;
-			osgDB::DirectoryContents dirNames = osgDB::getDirectoryContents(inputData);
-
-			// TODO: show progress, support multi-thread 
-			for each (std::string dir in dirNames)
+			osgDB::DirectoryContents fileNames = osgDB::getDirectoryContents(inputData);
+			osgDB::DirectoryContents dirNames;
+			std::vector<int> indices;
+			int count = 0;
+			for each (std::string file in fileNames)
 			{
-				if (dir.find(".") != std::string::npos)
+				if (file.find(".") != std::string::npos)
 					continue;
+				dirNames.push_back(file);
+				indices.push_back(count);
+				count++;
+			}
+
+			std::vector<Node> nodes(dirNames.size());
+			std::vector<Resource> resources;
+
+			std::mutex m;
+			int processed = 0;
+			int percent = -1;
+#if _HAS_CXX17
+			std::for_each(std::execution::par, std::begin(indices), std::end(indices), [&](int i) 
+#else
+			for (int i = 0; i < dirNames.size(); ++i)
+#endif
+			{
+				{
+					std::lock_guard<std::mutex> guard(m);
+					int cur = processed * 100 / dirNames.size();
+					if (cur > percent)
+					{
+						seed::progress::UpdateProgress(cur);
+						percent = cur;
+					}
+					processed++;
+				}
+				std::string dir = dirNames[i];
+
 				std::string output3mxbName = dir + "/" + dir + ".3mxb";
 				std::string output3mxb = outputData + output3mxbName;
 				osg::BoundingBox bb;
@@ -55,13 +85,15 @@ namespace seed
 					seed::log::DumpLog(seed::log::Critical, "Generate %s failed!", output3mxb.c_str());
 					return false;
 				}
-				Node node;
+				Node& node = nodes[i];
 				node.id = dir;
 				node.bb = bb;
 				node.maxScreenDiameter = 0;
 				node.children.push_back(output3mxbName);
-				nodes.emplace_back(node);
 			}
+#if _HAS_CXX17
+			);
+#endif
 
 			if (!Generate3mxb(nodes, resources, outputDataRoot))
 			{
@@ -316,7 +348,18 @@ namespace seed
 			}
 			else
 			{
-				return false;
+				// 1 node (0 child, 0 geometryBuffer, 0 textureBuffer)
+				int i = 0;
+				Node node;
+				Resource resGeometry;
+				Resource resTexture;
+
+				node.id = "node" + std::to_string(i);
+				node.maxScreenDiameter = 1e30;
+
+				nodes.emplace_back(node);
+				resources.emplace_back(resGeometry);
+				resources.emplace_back(resTexture);
 			}
 
 			if(!Generate3mxb(nodes, resources, output))

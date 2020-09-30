@@ -6,8 +6,17 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# c++ 17
+if (MSVC_VERSION GREATER_EQUAL "1900")
+    include(CheckCXXCompilerFlag)
+    CHECK_CXX_COMPILER_FLAG("/std:c++latest" _cpp_latest_flag_supported)
+    if (_cpp_latest_flag_supported)
+        add_compile_options("/std:c++latest")
+    endif()
+endif()
+
 # osg
-find_package(OpenSceneGraph REQUIRED osgDB osgUtil) # libOpenThreads & libosg automatically searched
+find_package(OpenSceneGraph 2.0.0 REQUIRED osgDB osgUtil)
 include_directories(${OPENSCENEGRAPH_INCLUDE_DIRS})
 
 # liblzma
@@ -24,12 +33,12 @@ include_directories("./openCTM/")
 add_definitions(-DOPENCTM_STATIC)
 
 # cJsonObject
-SET(CJSONOBJECT_SRC 
+set(CJSONOBJECT_SRC 
 	./cJsonObject/CJsonObject.cpp
 	./cJsonObject/cJSON.c
 )
 
-SET(CJSONOBJECT_H
+set(CJSONOBJECT_H
 	./cJsonObject/CJsonObject.hpp
     ./cJsonObject/cJSON.h
 )
@@ -41,21 +50,19 @@ include_directories("./cJsonObject/")
 file(GLOB HEADER ./src/*.h)
 file(GLOB SRC ./src/*.cpp)
 
-SET(TARGET_SRC 
+set(TARGET_SRC 
 	${SRC}
 	${CJSONOBJECT_SRC}
 	${LIBLZMA_SRC}
 	${OPENCTM_SRC}
 )
 
-SET(TARGET_H
+set(TARGET_H
 	${HEADER}
 	${CJSONOBJECT_H}
 	${LIBLZMA_H}
 	${OPENCTM_H}
 )
-
-
 
 add_executable(${CMAKE_PROJECT_NAME} ${TARGET_SRC} ${TARGET_H})
 target_link_libraries(${CMAKE_PROJECT_NAME} ${OPENSCENEGRAPH_LIBRARIES})
