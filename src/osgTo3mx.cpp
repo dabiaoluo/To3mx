@@ -291,13 +291,29 @@ namespace seed
 
 			node.id = "node" + std::to_string(index);
 			node.bb = bb;
-			node.maxScreenDiameter = lod->getRangeList().size() >= 2 ? lod->getRangeList()[1].first : 0;
+			if (lod->getRangeList().size() >= 2)
+			{
+				node.maxScreenDiameter = lod->getRangeList()[1].first;
+			}
+			else if (lod->getRangeList().size() == 1)
+			{
+				node.maxScreenDiameter = lod->getRangeList()[0].first;
+			}
+			else
+			{
+				node.maxScreenDiameter = 0;
+			}
+
 			if (lod->getNumFileNames() >= 2)
 			{
 				std::string baseName = osgDB::getNameLessExtension(lod->getFileName(1));
 				node.children.push_back(baseName + ".3mxb");
 			}
-			node.resources.push_back("geometry" + std::to_string(index));
+			else if (lod->getRangeList().size() == 1)
+			{
+				std::string baseName = osgDB::getNameLessExtension(lod->getFileName(0));
+				node.children.push_back(baseName + ".3mxb");
+			}
 			
 			if (!lod->getNumChildren())
 			{
@@ -312,6 +328,7 @@ namespace seed
 			{
 				return;
 			}
+			node.resources.push_back("geometry" + std::to_string(index));
 			ParseGeode(geode, index, resGeometry, resTexture);
 		}
 
