@@ -356,11 +356,10 @@ namespace seed
 				return;
 			}
 
-
-		   std::vector<CTMuint> aIndices;
-		   std::vector<CTMfloat> aVertices;
-		   std::vector<CTMfloat> aNormals;
-		   std::vector<CTMfloat> aUVCoords;
+			std::vector<CTMuint> aIndices;
+			std::vector<CTMfloat> aVertices;
+			std::vector<CTMfloat> aNormals;
+			std::vector<CTMfloat> aUVCoords;
 
 			for (int j = 0; j < 4; j++)
 			{
