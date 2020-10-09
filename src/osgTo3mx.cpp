@@ -61,6 +61,7 @@ namespace seed
 			std::string outputDataRootRelative = "Data/Root.3mxb";
 			std::string outputDataRoot = output + "/" + outputDataRootRelative;
 
+			seed::progress::UpdateProgress(0);
 			if (!utils::CheckOrCreateFolder(output))
 			{
 				seed::log::DumpLog(seed::log::Critical, "Create folder %s failed!", output.c_str());
@@ -135,6 +136,7 @@ namespace seed
 				seed::log::DumpLog(seed::log::Critical, "Generate %s failed!", outputDataRoot.c_str());
 				return false;
 			}
+			seed::progress::UpdateProgress(100);
 			return true;
 		}
 

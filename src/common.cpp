@@ -50,9 +50,60 @@ namespace seed
 
 	namespace progress
 	{
+
+		class Timer {
+		public:
+
+			Timer(){
+				restart();
+			}
+
+			inline void restart() {
+				_start_time = std::chrono::steady_clock::now();
+			}
+
+			// sec
+			inline double elapsed(bool restart = false) {
+				_end_time = std::chrono::steady_clock::now();
+				std::chrono::duration<double> diff = _end_time - _start_time;
+				if (restart)
+					this->restart();
+				return diff.count();
+			}
+
+		private:
+			std::chrono::steady_clock::time_point _start_time;
+			std::chrono::steady_clock::time_point _end_time;
+		}; // timer
+
+		Timer timer;
+
+		std::string secondToString(double sec)
+		{
+			if (sec > 60) {
+				return std::to_string(sec / 60) + " min";
+			}
+			else if (sec > 1)
+			{
+				return std::to_string(sec) + " s";
+			}
+			else {
+				return std::to_string(sec * 1000) + " ms";
+			}
+		}
+
 		void UpdateProgress(int value)
 		{
-			std::cout << "Progress: " << value << std::endl;
+			double elapsed = timer.elapsed();
+			if (value != 0)
+			{
+				double remaining = elapsed / value * (100 - value);
+				printf("Progress: %d, Time elapsed: %s, Time remaining: %s\n", value, secondToString(elapsed).c_str(), secondToString(remaining).c_str());
+			}
+			else
+			{
+				printf("Progress: %d, Time elapsed: %s, Time remaining: calculating...\n", value, secondToString(elapsed).c_str());
+			}
 		}
 	}
 
