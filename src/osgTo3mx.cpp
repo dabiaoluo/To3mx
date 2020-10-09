@@ -87,7 +87,8 @@ namespace seed
 			osgDB::DirectoryContents fileNames = osgDB::getDirectoryContents(inputData);
 
 			std::vector<Node> nodes;
-			std::vector<Resource> resources;
+			std::vector<Resource> resourcesGeometry;
+			std::vector<Resource> resourcesTexture;
 
 			int processed = 0;
 			int percent = -1;
@@ -129,7 +130,7 @@ namespace seed
 				return false;
 			}
 
-			if (!Generate3mxb(nodes, resources, outputDataRoot))
+			if (!Generate3mxb(nodes, resourcesGeometry, resourcesTexture, outputDataRoot))
 			{
 				seed::log::DumpLog(seed::log::Critical, "Generate %s failed!", outputDataRoot.c_str());
 				return false;
@@ -300,25 +301,12 @@ namespace seed
 			return true;
 		}
 
-		void OsgTo3mx::ParsePagedLOD(const std::string& input, osg::PagedLOD* lod, int index, Node& node, Resource& resGeometry, Resource& resTexture)
+		void OsgTo3mx::ParsePagedLOD(const std::string& input, osg::PagedLOD* lod, Node& node, std::vector<Resource>& resourcesGeometry, std::vector<Resource>& resourcesTexture)
 		{
 			osg::BoundingBox bb;
 			bb.expandBy(lod->getBound());
 
-			node.id = "node" + std::to_string(index);
 			node.bb = bb;
-			if (lod->getRangeList().size() >= 2)
-			{
-				node.maxScreenDiameter = lod->getRangeList()[1].first;
-			}
-			else if (lod->getRangeList().size() == 1)
-			{
-				node.maxScreenDiameter = lod->getRangeList()[0].first;
-			}
-			else
-			{
-				node.maxScreenDiameter = 0;
-			}
 
 			if (lod->getNumFileNames() >= 2)
 			{
@@ -346,234 +334,91 @@ namespace seed
 				seed::log::DumpLog(seed::log::Warning, "The first child of PagedLOD is NOT Geode in file %s", input.c_str());
 				return;
 			}
-			node.resources.push_back("geometry" + std::to_string(index));
-			ParseGeode(input, geode, index, resGeometry, resTexture);
+
+			ParseGeode(input, geode, node, resourcesGeometry, resourcesTexture);
+			if (lod->getRangeList().size() >= 2)
+			{
+				node.maxScreenDiameter = lod->getRangeList()[1].first;
+			}
+			else if (lod->getRangeList().size() == 1)
+			{
+				node.maxScreenDiameter = lod->getRangeList()[0].first;
+			}
+			else
+			{
+				node.maxScreenDiameter = 0;
+			}
 		}
 
-		void OsgTo3mx::ParseGeode(const std::string& input, osg::Geode* geode, int index, Resource& resGeometry, Resource& resTexture)
+		void OsgTo3mx::ParseGeode(const std::string& input, osg::Geode* geode, Node& node, std::vector<Resource>& resourcesGeometry, std::vector<Resource>& resourcesTexture)
 		{
 			osg::BoundingBox bb;
 			bb.expandBy(geode->getBound());
 
-			resTexture.type = "textureBuffer";
-			resTexture.format = "jpg";
-			resTexture.id = "texture" + std::to_string(index);
-
-			resGeometry.type = "geometryBuffer";
-			resGeometry.format = "ctm";
-			resGeometry.id = "geometry" + std::to_string(index);
-			resGeometry.texture = "texture" + std::to_string(index);
-			resGeometry.bb = bb;
-
+			node.bb = bb;
+			node.maxScreenDiameter = 1e30;
+			
 			InfoVisitor infoVisitor;
 			geode->accept(infoVisitor);
-
-			//if (infoVisitor.geometry_array.size() > 1)
-			//{
-			//	seed::log::DumpLog(seed::log::Warning, "Geode has more than 1 geometry in file %s", input.c_str());
-			//}
-
-			std::vector<CTMuint> aIndices;
-			std::vector<CTMfloat> aVertices;
-			std::vector<CTMfloat> aNormals;
-			std::vector<CTMfloat> aUVCoords;
-
-			for (int j = 0; j < 4; j++)
-			{
-				for (auto g : infoVisitor.geometry_array) {
-					if (g->getNumPrimitiveSets() == 0) {
-						continue;
-					}
-					osg::Array* va = g->getVertexArray();
-					if (j == 0) {
-						// indc
-						{
-							int idx_size = 0;
-							osg::PrimitiveSet::Type t_max = osg::PrimitiveSet::DrawElementsUBytePrimitiveType;
-							for (uint32 k = 0; k < g->getNumPrimitiveSets(); k++)
-							{
-								osg::PrimitiveSet* ps = g->getPrimitiveSet(k);
-								osg::PrimitiveSet::Type t = ps->getType();
-								if ((int)t > (int)t_max)
-								{
-									t_max = t;
-								}
-								idx_size += ps->getNumIndices();
-							}
-
-							for (uint32 k = 0; k < g->getNumPrimitiveSets(); k++)
-							{
-								osg::PrimitiveSet* ps = g->getPrimitiveSet(k);
-								osg::PrimitiveSet::Type t = ps->getType();
-								auto mode = ps->getMode();
-								if (mode != GL_TRIANGLES) {
-									seed::log::DumpLog(seed::log::Warning, "Found none-GL_TRIANGLES primitive set in file %s, none-GL_TRIANGLES primitive set will be ignored.", input.c_str());
-									continue;
-								}
-
-								switch (t)
-								{
-								case(osg::PrimitiveSet::DrawElementsUBytePrimitiveType):
-								{
-									const osg::DrawElementsUByte* drawElements = static_cast<const osg::DrawElementsUByte*>(ps);
-									int IndNum = drawElements->getNumIndices();
-									for (size_t m = 0; m < IndNum; m++)
-									{
-										aIndices.push_back(drawElements->at(m));
-									}
-									break;
-								}
-								case(osg::PrimitiveSet::DrawElementsUShortPrimitiveType):
-								{
-									const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
-									int IndNum = drawElements->getNumIndices();
-									for (size_t m = 0; m < IndNum; m++)
-									{
-										aIndices.push_back(drawElements->at(m));
-									}
-									break;
-								}
-								case(osg::PrimitiveSet::DrawElementsUIntPrimitiveType):
-								{
-									const osg::DrawElementsUInt* drawElements = static_cast<const osg::DrawElementsUInt*>(ps);
-									unsigned int IndNum = drawElements->getNumIndices();
-									for (size_t m = 0; m < IndNum; m++)
-									{
-										aIndices.push_back(drawElements->at(m));
-									}
-									break;
-								}
-								case osg::PrimitiveSet::DrawArraysPrimitiveType: {
-									osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
-									if (k == 0) {
-										int first = da->getFirst();
-										int count = da->getCount();
-										int max_num = first + count;
-										if (max_num >= 65535) {
-											max_num = 65535; idx_size = 65535;
-										}
-										for (int i = first; i < max_num; i++) {
-											aIndices.push_back(i);
-										}
-									}
-									break;
-								}
-								default:
-								{
-									seed::log::DumpLog(seed::log::Critical, "Found un-handled osg::PrimitiveSet::Type [%d] in file %s", t, input.c_str());
-									break;
-								}
-								}
-							}
-						}
-					}
-					else if (j == 1) {
-						osg::Vec3Array* v3f = (osg::Vec3Array*)va;
-						int vec_size = v3f->size();
-						for (int vidx = 0; vidx < vec_size; vidx++)
-						{
-							osg::Vec3f point = v3f->at(vidx);
-							aVertices.push_back(point.x());
-							aVertices.push_back(point.y());
-							aVertices.push_back(point.z());
-						}
-					}
-					else if (j == 2) {
-						// normal
-						int normal_size = 0;
-						osg::Array* na = g->getNormalArray();
-						if (na)
-						{
-							osg::Vec3Array* v3f = (osg::Vec3Array*)na;
-							normal_size = v3f->size();
-							for (int vidx = 0; vidx < normal_size; vidx++)
-							{
-								osg::Vec3f point = v3f->at(vidx);
-								aNormals.push_back(point.x());
-								aNormals.push_back(point.y());
-								aNormals.push_back(point.z());
-							}
-						}
-					}
-					else if (j == 3) {
-						// texture
-						int texture_size = 0;
-						osg::Array* na = g->getTexCoordArray(0);
-						if (na) {
-							osg::Vec2Array* v2f = (osg::Vec2Array*)na;
-							texture_size = v2f->size();
-							for (int vidx = 0; vidx < texture_size; vidx++)
-							{
-								osg::Vec2f point = v2f->at(vidx);
-								aUVCoords.push_back(point.x());
-								aUVCoords.push_back(point.y());
-							}
-						}
-					}
-				}
-			}
-			CTMexporter ctm;
-			ctm.DefineMesh(aVertices.data(), aVertices.size() / 3, aIndices.data(), aIndices.size() / 3, aNormals.data());
-			ctm.AddUVMap(aUVCoords.data(), nullptr, nullptr);
-			ctm.SaveCustom(_ctm_write_buf, &resGeometry.bufferData);
+			std::map<osg::Texture*, std::string> texture_id_map;
 
 			// handle texture
-			if (infoVisitor.texture_array.size() > 1)
+			for (auto tex : infoVisitor.texture_array)
 			{
-				seed::log::DumpLog(seed::log::Warning, "Geode has more than 1 texture in file %s, only the first texture will be converted.", input.c_str());
+				Resource resTexture;
+				resTexture.type = "textureBuffer";
+				resTexture.format = "jpg";
+				resTexture.id = "texture" + std::to_string(resourcesTexture.size());
+				texture_id_map[tex] = resTexture.id;
+				TextureToBuffer(input, tex, resTexture.bufferData);
+
+				resourcesTexture.emplace_back(resTexture);
 			}
 
-			for (auto tex : infoVisitor.texture_array) 
+			// handle geometry
+			for (auto g : infoVisitor.geometry_array)
 			{
-				std::vector<unsigned char> jpeg_buf;
-				jpeg_buf.reserve(512 * 512 * 3);
-				int width, height, comp;
+				Resource resGeometry;
+				resGeometry.type = "geometryBuffer";
+				resGeometry.format = "ctm";
+				resGeometry.id = "geometry" + std::to_string(resourcesGeometry.size());
+				resGeometry.texture = texture_id_map[infoVisitor.texture_map[g]];
+				resGeometry.bb = bb;
+				GeometryToBuffer(input, g, resGeometry.bufferData);
+
+				resourcesGeometry.emplace_back(resGeometry);
+				node.resources.push_back(resGeometry.id);
+			}
+		}
+
+		void OsgTo3mx::ParseGroup(const std::string& input, osg::Group* group, std::vector<Node>& nodes, std::vector<Resource>& resourcesGeometry, std::vector<Resource>& resourcesTexture)
+		{
+			for (uint32 i = 0; i < group->getNumChildren(); ++i)
+			{
+				Node node;
+				node.id = "node" + std::to_string(nodes.size());
+				if (dynamic_cast<osg::PagedLOD*>(group->getChild(i)))
 				{
-					if (tex) {
-						if (tex->getNumImages() > 0) {
-							osg::Image* img = tex->getImage(0);
-							if (img) {
-								width = img->s();
-								height = img->t();
-								comp = img->getPixelSizeInBits();
-								if (comp == 8) comp = 1;
-								if (comp == 24) comp = 3;
-								if (comp == 4) {
-									comp = 3;
-									fill_4BitImage(jpeg_buf, img, width, height);
-								}
-								else
-								{
-									unsigned row_step = img->getRowStepInBytes();
-									unsigned row_size = img->getRowSizeInBytes();
-									for (int i = height - 1; i >= 0; i--)
-									{
-										jpeg_buf.insert(jpeg_buf.end(),
-											img->data() + row_step * i,
-											img->data() + row_step * i + row_size);
-									}
-									//for (size_t i = 0; i < height; i++)
-									//{
-									//	jpeg_buf.insert(jpeg_buf.end(),
-									//		img->data() + row_step * i,
-									//		img->data() + row_step * i + row_size);
-									//}
-								}
-							}
-						}
-					}
+					osg::PagedLOD* lod = dynamic_cast<osg::PagedLOD*>(group->getChild(i));
+					ParsePagedLOD(input, lod, node, resourcesGeometry, resourcesTexture);
+					nodes.push_back(node);
 				}
-				if (!jpeg_buf.empty()) {
-					resTexture.bufferData.reserve(width * height * comp);
-					stbi_write_jpg_to_func(write_buf, &resTexture.bufferData, width, height, comp, jpeg_buf.data(), 80);
+				else if (group->getChild(i)->asGeode())
+				{
+					osg::Geode* geode = group->getChild(i)->asGeode();
+					ParseGeode(input, geode, node, resourcesGeometry, resourcesTexture);
+					nodes.push_back(node);
 				}
-				else {
-					std::vector<char> v_data;
-					width = height = 256;
-					v_data.resize(width * height * 3);
-					stbi_write_jpg_to_func(write_buf, &resTexture.bufferData, width, height, 3, v_data.data(), 80);
+				else if (group->getChild(i)->asGroup())
+				{
+					osg::Group* subGroup = group->getChild(i)->asGroup();
+					ParseGroup(input, subGroup, nodes, resourcesGeometry, resourcesTexture);
 				}
-				break; // only convert the first texture
+				else
+				{
+					node.maxScreenDiameter = 1e30;
+					nodes.push_back(node);
+				}
 			}
 		}
 
@@ -581,119 +426,46 @@ namespace seed
 		{
 			seed::log::DumpLog(seed::log::Debug, "Convert %s ...", input.c_str());
 			std::vector<Node> nodes;
-			std::vector<Resource> resources;
+			std::vector<Resource> resourcesGeometry;
+			std::vector<Resource> resourcesTexture;
 			osg::ref_ptr<osg::Node> osgNode = osgDB::readNodeFile(input);
 			if (dynamic_cast<osg::PagedLOD*>(osgNode.get()))
 			{
-				// 1 node (1 child, 1 geometryBuffer, 1 textureBuffer)
-				int i = 0;
 				osg::PagedLOD* lod = dynamic_cast<osg::PagedLOD*>(osgNode.get());
 
 				Node node;
-				Resource resGeometry;
-				Resource resTexture;
+				node.id = "node0";
 
-				ParsePagedLOD(input, lod, i, node, resGeometry, resTexture);
+				ParsePagedLOD(input, lod, node, resourcesGeometry, resourcesTexture);
 
 				nodes.push_back(node);
-				resources.push_back(resTexture);
-				resources.push_back(resGeometry);
 			}
 			else if (osgNode->asGeode())
 			{
-				// 1 node (0 child, 1 geometryBuffer, 1 textureBuffer)
-				int i = 0;
 				osg::Geode* geode = osgNode->asGeode();
 				osg::BoundingBox bb;
 				bb.expandBy(geode->getBound());
 
 				Node node;
-				Resource resGeometry;
-				Resource resTexture;
+				node.id = "node0";
 
-				node.id = "node" + std::to_string(i);
-				node.bb = bb;
-				node.maxScreenDiameter = 1e30;
-				node.resources.push_back("geometry" + std::to_string(i));
-
-				ParseGeode(input, geode, i, resGeometry, resTexture);
+				ParseGeode(input, geode, node, resourcesGeometry, resourcesTexture);
 
 				nodes.push_back(node);
-				resources.push_back(resTexture);
-				resources.push_back(resGeometry);
 			}
 			else if (osgNode->asGroup())
 			{
-				// 4 node (1 child, 1 geometryBuffer, 1 textureBuffer)
 				osg::Group* group = osgNode->asGroup();
-				for (uint32 i = 0; i < group->getNumChildren(); ++i)
-				{
-					if (dynamic_cast<osg::PagedLOD*>(group->getChild(i)))
-					{
-						osg::PagedLOD* lod = dynamic_cast<osg::PagedLOD*>(group->getChild(i));
-
-						Node node;
-						Resource resGeometry;
-						Resource resTexture;
-
-						ParsePagedLOD(input, lod, i, node, resGeometry, resTexture);
-
-						nodes.push_back(node);
-						resources.push_back(resTexture);
-						resources.push_back(resGeometry);
-					}
-					else if (group->getChild(i)->asGeode())
-					{
-						osg::Geode* geode = group->getChild(i)->asGeode();
-						osg::BoundingBox bb;
-						bb.expandBy(geode->getBound());
-
-						Node node;
-						Resource resGeometry;
-						Resource resTexture;
-
-						node.id = "node" + std::to_string(i);
-						node.bb = bb;
-						node.maxScreenDiameter = 1e30;
-						node.resources.push_back("geometry" + std::to_string(i));
-
-						ParseGeode(input, geode, i, resGeometry, resTexture);
-
-						nodes.push_back(node);
-						resources.push_back(resTexture);
-						resources.push_back(resGeometry);
-					}
-					else
-					{
-						// 1 node (0 child, 0 geometryBuffer, 0 textureBuffer)
-						int i = 0;
-						Node node;
-						Resource resGeometry;
-						Resource resTexture;
-
-						node.id = "node" + std::to_string(i);
-						node.maxScreenDiameter = 1e30;
-
-						nodes.push_back(node);
-						resources.push_back(resTexture);
-						resources.push_back(resGeometry);
-					}
-				}
+				ParseGroup(input, group, nodes, resourcesGeometry, resourcesTexture);
 			}
 			else
 			{
-				// 1 node (0 child, 0 geometryBuffer, 0 textureBuffer)
-				int i = 0;
 				Node node;
-				Resource resGeometry;
-				Resource resTexture;
+				node.id = "node0";
 
-				node.id = "node" + std::to_string(i);
 				node.maxScreenDiameter = 1e30;
 
 				nodes.push_back(node);
-				resources.push_back(resTexture);
-				resources.push_back(resGeometry);
 			}
 
 			if (pbb && nodes.size())
@@ -707,7 +479,7 @@ namespace seed
 				return false;
 			}
 
-			if(!Generate3mxb(nodes, resources, output))
+			if(!Generate3mxb(nodes, resourcesGeometry, resourcesTexture, output))
 			{
 				seed::log::DumpLog(seed::log::Critical, "Generate %s failed!", output.c_str());
 				return false;
@@ -716,7 +488,7 @@ namespace seed
 			return true;
 		}
 
-		bool OsgTo3mx::Generate3mxb(const std::vector<Node>& nodes, const std::vector<Resource>& resources, const std::string& output)
+		bool OsgTo3mx::Generate3mxb(const std::vector<Node>& nodes, const std::vector<Resource>& resourcesGeometry, const std::vector<Resource>& resourcesTexture, const std::string& output)
 		{
 			neb::CJsonObject oJson;
 			oJson.Add("version", 1);
@@ -728,7 +500,11 @@ namespace seed
 			}
 
 			oJson.AddEmptySubArray("resources");
-			for (const auto& resource : resources)
+			for (const auto& resource : resourcesTexture)
+			{
+				oJson["resources"].Add(ResourceToJson(resource));
+			}
+			for (const auto& resource : resourcesGeometry)
 			{
 				oJson["resources"].Add(ResourceToJson(resource));
 			}
@@ -747,7 +523,11 @@ namespace seed
 			outfile.write((char*)&length, 4);
 			outfile.write(jsonStr.c_str(), length);
 
-			for (const auto& resource : resources)
+			for (const auto& resource : resourcesTexture)
+			{
+				outfile.write(resource.bufferData.data(), resource.bufferData.size());
+			}
+			for (const auto& resource : resourcesGeometry)
 			{
 				outfile.write(resource.bufferData.data(), resource.bufferData.size());
 			}
@@ -815,5 +595,192 @@ namespace seed
 			return oJson;
 		}
 
+		void OsgTo3mx::GeometryToBuffer(const std::string& input, osg::Geometry* geometry, std::vector<char>& bufferData)
+		{
+			if (geometry->getNumPrimitiveSets() == 0) {
+				return;
+			}
+
+			std::vector<CTMuint> aIndices;
+			std::vector<CTMfloat> aVertices;
+			std::vector<CTMfloat> aNormals;
+			std::vector<CTMfloat> aUVCoords;
+
+			// indc
+			{
+				int idx_size = 0;
+				osg::PrimitiveSet::Type t_max = osg::PrimitiveSet::DrawElementsUBytePrimitiveType;
+				for (uint32 k = 0; k < geometry->getNumPrimitiveSets(); k++)
+				{
+					osg::PrimitiveSet* ps = geometry->getPrimitiveSet(k);
+					osg::PrimitiveSet::Type t = ps->getType();
+					if ((int)t > (int)t_max)
+					{
+						t_max = t;
+					}
+					idx_size += ps->getNumIndices();
+				}
+
+				for (uint32 k = 0; k < geometry->getNumPrimitiveSets(); k++)
+				{
+					osg::PrimitiveSet* ps = geometry->getPrimitiveSet(k);
+					osg::PrimitiveSet::Type t = ps->getType();
+					auto mode = ps->getMode();
+					if (mode != GL_TRIANGLES) {
+						seed::log::DumpLog(seed::log::Warning, "Found none-GL_TRIANGLES primitive set in file %s, none-GL_TRIANGLES primitive set will be ignored.", input.c_str());
+						continue;
+					}
+
+					switch (t)
+					{
+					case(osg::PrimitiveSet::DrawElementsUBytePrimitiveType):
+					{
+						const osg::DrawElementsUByte* drawElements = static_cast<const osg::DrawElementsUByte*>(ps);
+						int IndNum = drawElements->getNumIndices();
+						for (size_t m = 0; m < IndNum; m++)
+						{
+							aIndices.push_back(drawElements->at(m));
+						}
+						break;
+					}
+					case(osg::PrimitiveSet::DrawElementsUShortPrimitiveType):
+					{
+						const osg::DrawElementsUShort* drawElements = static_cast<const osg::DrawElementsUShort*>(ps);
+						int IndNum = drawElements->getNumIndices();
+						for (size_t m = 0; m < IndNum; m++)
+						{
+							aIndices.push_back(drawElements->at(m));
+						}
+						break;
+					}
+					case(osg::PrimitiveSet::DrawElementsUIntPrimitiveType):
+					{
+						const osg::DrawElementsUInt* drawElements = static_cast<const osg::DrawElementsUInt*>(ps);
+						unsigned int IndNum = drawElements->getNumIndices();
+						for (size_t m = 0; m < IndNum; m++)
+						{
+							aIndices.push_back(drawElements->at(m));
+						}
+						break;
+					}
+					case osg::PrimitiveSet::DrawArraysPrimitiveType: {
+						osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
+						if (k == 0) {
+							int first = da->getFirst();
+							int count = da->getCount();
+							int max_num = first + count;
+							if (max_num >= 65535) {
+								max_num = 65535; idx_size = 65535;
+							}
+							for (int i = first; i < max_num; i++) {
+								aIndices.push_back(i);
+							}
+						}
+						break;
+					}
+					default:
+					{
+						seed::log::DumpLog(seed::log::Critical, "Found un-handled osg::PrimitiveSet::Type [%d] in file %s", t, input.c_str());
+						break;
+					}
+					}
+				}
+			}
+			osg::Array* va = geometry->getVertexArray();
+			osg::Vec3Array* v3f = (osg::Vec3Array*)va;
+			int vec_size = v3f->size();
+			for (int vidx = 0; vidx < vec_size; vidx++)
+			{
+				osg::Vec3f point = v3f->at(vidx);
+				aVertices.push_back(point.x());
+				aVertices.push_back(point.y());
+				aVertices.push_back(point.z());
+			}
+			// normal
+			int normal_size = 0;
+			osg::Array* na = geometry->getNormalArray();
+			if (na)
+			{
+				osg::Vec3Array* v3f = (osg::Vec3Array*)na;
+				normal_size = v3f->size();
+				for (int vidx = 0; vidx < normal_size; vidx++)
+				{
+					osg::Vec3f point = v3f->at(vidx);
+					aNormals.push_back(point.x());
+					aNormals.push_back(point.y());
+					aNormals.push_back(point.z());
+				}
+			}
+			// texture
+			int texture_size = 0;
+			osg::Array* ta = geometry->getTexCoordArray(0);
+			if (ta) {
+				osg::Vec2Array* v2f = (osg::Vec2Array*)ta;
+				texture_size = v2f->size();
+				for (int vidx = 0; vidx < texture_size; vidx++)
+				{
+					osg::Vec2f point = v2f->at(vidx);
+					aUVCoords.push_back(point.x());
+					aUVCoords.push_back(point.y());
+				}
+			}
+
+			CTMexporter ctm;
+			ctm.DefineMesh(aVertices.data(), aVertices.size() / 3, aIndices.data(), aIndices.size() / 3, aNormals.data());
+			ctm.AddUVMap(aUVCoords.data(), nullptr, nullptr);
+			ctm.SaveCustom(_ctm_write_buf, &bufferData);
+		}
+
+		void OsgTo3mx::TextureToBuffer(const std::string& input, osg::Texture* texture, std::vector<char>& bufferData)
+		{
+			std::vector<unsigned char> jpeg_buf;
+			jpeg_buf.reserve(512 * 512 * 3);
+			int width, height, comp;
+			{
+				if (texture) {
+					if (texture->getNumImages() > 0) {
+						osg::Image* img = texture->getImage(0);
+						if (img) {
+							width = img->s();
+							height = img->t();
+							comp = img->getPixelSizeInBits();
+							if (comp == 8) comp = 1;
+							if (comp == 24) comp = 3;
+							if (comp == 4) {
+								comp = 3;
+								fill_4BitImage(jpeg_buf, img, width, height);
+							}
+							else
+							{
+								unsigned row_step = img->getRowStepInBytes();
+								unsigned row_size = img->getRowSizeInBytes();
+								for (int i = height - 1; i >= 0; i--)
+								{
+									jpeg_buf.insert(jpeg_buf.end(),
+										img->data() + row_step * i,
+										img->data() + row_step * i + row_size);
+								}
+								//for (size_t i = 0; i < height; i++)
+								//{
+								//	jpeg_buf.insert(jpeg_buf.end(),
+								//		img->data() + row_step * i,
+								//		img->data() + row_step * i + row_size);
+								//}
+							}
+						}
+					}
+				}
+			}
+			if (!jpeg_buf.empty()) {
+				bufferData.reserve(width * height * comp);
+				stbi_write_jpg_to_func(write_buf, &bufferData, width, height, comp, jpeg_buf.data(), 80);
+			}
+			else {
+				std::vector<char> v_data;
+				width = height = 256;
+				v_data.resize(width * height * 3);
+				stbi_write_jpg_to_func(write_buf, &bufferData, width, height, 3, v_data.data(), 80);
+			}
+		}
 	}
 }

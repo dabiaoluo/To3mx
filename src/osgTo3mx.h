@@ -61,13 +61,17 @@ namespace seed
 			bool ConvertOsgbTo3mxb(const std::string& input, const std::string& output, osg::BoundingBox* pbb = nullptr);
 
 			bool GenerateMetadata(const std::string& output);
-			bool Generate3mxb(const std::vector<Node>& nodes, const std::vector<Resource>& resources, const std::string& output);
+			bool Generate3mxb(const std::vector<Node>& nodes, const std::vector<Resource>& resourcesGeometry, const std::vector<Resource>& resourcesTexture, const std::string& output);
 
 			neb::CJsonObject NodeToJson(const Node& node);
 			neb::CJsonObject ResourceToJson(const Resource& resource);
 
-			void ParsePagedLOD(const std::string& input, osg::PagedLOD* lod, int index, Node& node, Resource& resGeometry, Resource& resTexture);
-			void ParseGeode(const std::string& input, osg::Geode* geode, int index, Resource& resGeometry, Resource& resTexture);
+			void ParsePagedLOD(const std::string& input, osg::PagedLOD* lod, Node& node, std::vector<Resource>& resourcesGeometry, std::vector<Resource>& resourcesTexture);
+			void ParseGeode(const std::string& input, osg::Geode* geode, Node& node, std::vector<Resource>& resourcesGeometry, std::vector<Resource>& resourcesTexture);
+			void ParseGroup(const std::string& input, osg::Group* group, std::vector<Node>& nodes, std::vector<Resource>& resourcesGeometry, std::vector<Resource>& resourcesTexture);
+
+			void GeometryToBuffer(const std::string& input, osg::Geometry* geometry, std::vector<char>& bufferData);
+			void TextureToBuffer(const std::string& input, osg::Texture* texture, std::vector<char>& bufferData);
 		};
 	}
 }
