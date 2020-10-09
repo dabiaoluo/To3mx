@@ -24,8 +24,26 @@ namespace seed
 			va_start(args, i_cFormat);
 			_vsnprintf_s(l_cLog, _TRUNCATE, i_cFormat, args);
 			va_end(args);
-			printf(l_cLog);
-			printf("\n");
+			switch (i_nType)
+			{
+			case Debug:
+				printf("Debug: %s\n", l_cLog);
+				break;
+			case Warning:
+				printf("Warning: %s\n", l_cLog);
+				break;
+			case Critical:
+				printf("Critical: %s\n", l_cLog);
+				break;
+			case Fatal:
+				printf("Fatal: %s\n", l_cLog);
+				break;
+			case Info:
+				printf("Info: %s\n", l_cLog);
+				break;
+			default:
+				break;
+			}
 			return true;
 		}
 	}
