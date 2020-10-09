@@ -331,13 +331,11 @@ namespace seed
 				seed::log::DumpLog(seed::log::Warning, "PagedLOD has more than 1 child in file %s, only the first child will be converted.", input.c_str());
 			}
 			osg::Geode* geode = lod->getChild(0)->asGeode();
-			if (!geode)
+			if (geode)
 			{
-				seed::log::DumpLog(seed::log::Warning, "The first child of PagedLOD is NOT Geode in file %s", input.c_str());
-				return;
+				ParseGeode(input, geode, node, resourcesGeometry, resourcesTexture);
 			}
 
-			ParseGeode(input, geode, node, resourcesGeometry, resourcesTexture);
 			if (lod->getRangeList().size() >= 2)
 			{
 				node.maxScreenDiameter = lod->getRangeList()[1].first;
