@@ -305,11 +305,6 @@ namespace seed
 
 		void OsgTo3mx::ParsePagedLOD(const std::string& input, osg::PagedLOD* lod, Node& node, std::vector<Resource>& resourcesGeometry, std::vector<Resource>& resourcesTexture)
 		{
-			osg::BoundingBox bb;
-			bb.expandBy(lod->getBound());
-
-			node.bb = bb;
-
 			if (lod->getNumFileNames() >= 2)
 			{
 				std::string baseName = osgDB::getNameLessExtension(lod->getFileName(1));
@@ -321,23 +316,27 @@ namespace seed
 				node.children.push_back(baseName + ".3mxb");
 			}
 			
-			if (!lod->getNumChildren())
+			if (lod->getNumChildren())
+			{
+				if (lod->getNumChildren() > 1)
+				{
+					seed::log::DumpLog(seed::log::Warning, "PagedLOD has more than 1 child in file %s, only the first child will be converted.", input.c_str());
+				}
+				osg::Geode* geode = lod->getChild(0)->asGeode();
+				if (geode)
+				{
+					ParseGeode(input, geode, node, resourcesGeometry, resourcesTexture);
+				}
+			}
+			else
 			{
 				seed::log::DumpLog(seed::log::Warning, "PagedLOD has 0 child in file %s", input.c_str());
-				return;
-			}
-			if (lod->getNumChildren() > 1)
-			{
-				seed::log::DumpLog(seed::log::Warning, "PagedLOD has more than 1 child in file %s, only the first child will be converted.", input.c_str());
-			}
-			osg::Geode* geode = lod->getChild(0)->asGeode();
-			if (!geode)
-			{
-				seed::log::DumpLog(seed::log::Warning, "The first child of PagedLOD is NOT Geode in file %s", input.c_str());
-				return;
 			}
 
-			ParseGeode(input, geode, node, resourcesGeometry, resourcesTexture);
+			osg::BoundingBox bb;
+			bb.expandBy(lod->getBound());
+
+			node.bb = bb;
 			if (lod->getRangeList().size() >= 2)
 			{
 				node.maxScreenDiameter = lod->getRangeList()[1].first;
