@@ -272,7 +272,7 @@ namespace seed
 			}
 			seed::log::DumpLog(seed::log::Debug, "Found %d files in %s...", osgbFileNames.size(), inputTile.c_str());
 
-#if _HAS_CXX17
+#if _HAS_CXX17 && !_DEBUG
 			std::for_each(std::execution::par_unseq, std::begin(indices), std::end(indices), [&](int i)
 #else
 			std::for_each(std::begin(indices), std::end(indices), [&](int i)
