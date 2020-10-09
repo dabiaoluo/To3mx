@@ -335,7 +335,6 @@ namespace seed
 
 			osg::BoundingBox bb;
 			bb.expandBy(lod->getBound());
-
 			node.bb = bb;
 			if (lod->getRangeList().size() >= 2)
 			{
