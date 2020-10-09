@@ -66,8 +66,8 @@ namespace seed
 			neb::CJsonObject NodeToJson(const Node& node);
 			neb::CJsonObject ResourceToJson(const Resource& resource);
 
-			void ParsePagedLOD(osg::PagedLOD* lod, int index, Node& node, Resource& resGeometry, Resource& resTexture);
-			void ParseGeode(osg::Geode* geode, int index, Resource& resGeometry, Resource& resTexture);
+			void ParsePagedLOD(const std::string& input, osg::PagedLOD* lod, int index, Node& node, Resource& resGeometry, Resource& resTexture);
+			void ParseGeode(const std::string& input, osg::Geode* geode, int index, Resource& resGeometry, Resource& resTexture);
 		};
 	}
 }

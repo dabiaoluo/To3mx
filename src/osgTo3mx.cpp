@@ -123,6 +123,12 @@ namespace seed
 				}
 			}
 
+			if (nodes.empty())
+			{
+				seed::log::DumpLog(seed::log::Warning, "Extract 0 node from %s", inputData.c_str());
+				return false;
+			}
+
 			if (!Generate3mxb(nodes, resources, outputDataRoot))
 			{
 				seed::log::DumpLog(seed::log::Critical, "Generate %s failed!", outputDataRoot.c_str());
@@ -145,6 +151,11 @@ namespace seed
 			outfile << "		<ColorSource>Visible</ColorSource>\n";
 			outfile << "	</Texture>\n";
 			outfile << "</ModelMetadata>\n";
+			if (outfile.bad())
+			{
+				seed::log::DumpLog(seed::log::Critical, "An error has occurred while writing file %s!", output.c_str());
+				return false;
+			}
 			return true;
 		}
 
@@ -210,7 +221,12 @@ namespace seed
 				seed::log::DumpLog(seed::log::Critical, "Can NOT open file %s!", output.c_str());
 				return false;
 			}
-			outfile << oJson.ToFormattedString();;
+			outfile << oJson.ToFormattedString();
+			if (outfile.bad())
+			{
+				seed::log::DumpLog(seed::log::Critical, "An error has occurred while writing file %s!", output.c_str());
+				return false;
+			}
 			return true;
 		}
 
@@ -284,7 +300,7 @@ namespace seed
 			return true;
 		}
 
-		void OsgTo3mx::ParsePagedLOD(osg::PagedLOD* lod, int index, Node& node, Resource& resGeometry, Resource& resTexture)
+		void OsgTo3mx::ParsePagedLOD(const std::string& input, osg::PagedLOD* lod, int index, Node& node, Resource& resGeometry, Resource& resTexture)
 		{
 			osg::BoundingBox bb;
 			bb.expandBy(lod->getBound());
@@ -317,22 +333,24 @@ namespace seed
 			
 			if (!lod->getNumChildren())
 			{
+				seed::log::DumpLog(seed::log::Warning, "PagedLOD has 0 child in file %s", input.c_str());
 				return;
 			}
 			if (lod->getNumChildren() > 1)
 			{
-				seed::log::DumpLog(seed::log::Warning, "PagedLOD has more than 1 Geode!");
+				seed::log::DumpLog(seed::log::Warning, "PagedLOD has more than 1 child in file %s, only the first child will be converted.", input.c_str());
 			}
 			osg::Geode* geode = lod->getChild(0)->asGeode();
 			if (!geode)
 			{
+				seed::log::DumpLog(seed::log::Warning, "The first child of PagedLOD is NOT Geode in file %s", input.c_str());
 				return;
 			}
 			node.resources.push_back("geometry" + std::to_string(index));
-			ParseGeode(geode, index, resGeometry, resTexture);
+			ParseGeode(input, geode, index, resGeometry, resTexture);
 		}
 
-		void OsgTo3mx::ParseGeode(osg::Geode* geode, int index, Resource& resGeometry, Resource& resTexture)
+		void OsgTo3mx::ParseGeode(const std::string& input, osg::Geode* geode, int index, Resource& resGeometry, Resource& resTexture)
 		{
 			osg::BoundingBox bb;
 			bb.expandBy(geode->getBound());
@@ -350,11 +368,10 @@ namespace seed
 			InfoVisitor infoVisitor;
 			geode->accept(infoVisitor);
 
-			if (infoVisitor.geometry_array.size() != 1)
-			{
-				seed::log::DumpLog(seed::log::Critical, "Geode has more than 1 geometry!");
-				return;
-			}
+			//if (infoVisitor.geometry_array.size() > 1)
+			//{
+			//	seed::log::DumpLog(seed::log::Warning, "Geode has more than 1 geometry in file %s", input.c_str());
+			//}
 
 			std::vector<CTMuint> aIndices;
 			std::vector<CTMfloat> aVertices;
@@ -388,6 +405,11 @@ namespace seed
 							{
 								osg::PrimitiveSet* ps = g->getPrimitiveSet(k);
 								osg::PrimitiveSet::Type t = ps->getType();
+								auto mode = ps->getMode();
+								if (mode != GL_TRIANGLES) {
+									seed::log::DumpLog(seed::log::Warning, "Found none-GL_TRIANGLES primitive set in file %s, none-GL_TRIANGLES primitive set will be ignored.", input.c_str());
+									continue;
+								}
 
 								switch (t)
 								{
@@ -423,10 +445,6 @@ namespace seed
 								}
 								case osg::PrimitiveSet::DrawArraysPrimitiveType: {
 									osg::DrawArrays* da = dynamic_cast<osg::DrawArrays*>(ps);
-									auto mode = da->getMode();
-									if (mode != GL_TRIANGLES) {
-										seed::log::DumpLog(seed::log::Critical, "GLenum is not GL_TRIANGLES in osgb!");
-									}
 									if (k == 0) {
 										int first = da->getFirst();
 										int count = da->getCount();
@@ -442,7 +460,7 @@ namespace seed
 								}
 								default:
 								{
-									seed::log::DumpLog(seed::log::Critical, "missing osg::PrimitiveSet::Type [%d]", t);
+									seed::log::DumpLog(seed::log::Critical, "Found un-handled osg::PrimitiveSet::Type [%d] in file %s", t, input.c_str());
 									break;
 								}
 								}
@@ -494,7 +512,6 @@ namespace seed
 					}
 				}
 			}
-			//seed::log::DumpLog(seed::log::Critical, "aVertices = %d, aIndices = %d", aVertices.size() / 3, aIndices.size() / 3);
 			CTMexporter ctm;
 			ctm.DefineMesh(aVertices.data(), aVertices.size() / 3, aIndices.data(), aIndices.size() / 3, aNormals.data());
 			ctm.AddUVMap(aUVCoords.data(), nullptr, nullptr);
@@ -503,8 +520,7 @@ namespace seed
 			// handle texture
 			if (infoVisitor.texture_array.size() > 1)
 			{
-				seed::log::DumpLog(seed::log::Critical, "Geode has more than 1 texture!");
-				return;
+				seed::log::DumpLog(seed::log::Warning, "Geode has more than 1 texture in file %s, only the first texture will be converted.", input.c_str());
 			}
 
 			for (auto tex : infoVisitor.texture_array) 
@@ -546,6 +562,7 @@ namespace seed
 							}
 						}
 					}
+					break; // only convert the first texture
 				}
 				if (!jpeg_buf.empty()) {
 					resTexture.bufferData.reserve(width * height * comp);
@@ -562,7 +579,7 @@ namespace seed
 
 		bool OsgTo3mx::ConvertOsgbTo3mxb(const std::string& input, const std::string& output, osg::BoundingBox* pbb)
 		{
-			//seed::log::DumpLog(seed::log::Debug, "Convert %s ...", input.c_str());
+			seed::log::DumpLog(seed::log::Debug, "Convert %s ...", input.c_str());
 			std::vector<Node> nodes;
 			std::vector<Resource> resources;
 			osg::ref_ptr<osg::Node> osgNode = osgDB::readNodeFile(input);
@@ -576,7 +593,7 @@ namespace seed
 				Resource resGeometry;
 				Resource resTexture;
 
-				ParsePagedLOD(lod, i, node, resGeometry, resTexture);
+				ParsePagedLOD(input, lod, i, node, resGeometry, resTexture);
 
 				nodes.push_back(node);
 				resources.push_back(resTexture);
@@ -599,7 +616,7 @@ namespace seed
 				node.maxScreenDiameter = 1e30;
 				node.resources.push_back("geometry" + std::to_string(i));
 
-				ParseGeode(geode, i, resGeometry, resTexture);
+				ParseGeode(input, geode, i, resGeometry, resTexture);
 
 				nodes.push_back(node);
 				resources.push_back(resTexture);
@@ -619,7 +636,7 @@ namespace seed
 						Resource resGeometry;
 						Resource resTexture;
 
-						ParsePagedLOD(lod, i, node, resGeometry, resTexture);
+						ParsePagedLOD(input, lod, i, node, resGeometry, resTexture);
 
 						nodes.push_back(node);
 						resources.push_back(resTexture);
@@ -640,7 +657,7 @@ namespace seed
 						node.maxScreenDiameter = 1e30;
 						node.resources.push_back("geometry" + std::to_string(i));
 
-						ParseGeode(geode, i, resGeometry, resTexture);
+						ParseGeode(input, geode, i, resGeometry, resTexture);
 
 						nodes.push_back(node);
 						resources.push_back(resTexture);
@@ -684,8 +701,15 @@ namespace seed
 				*pbb = nodes[0].bb;
 			}
 
+			if (nodes.empty())
+			{
+				seed::log::DumpLog(seed::log::Warning, "Extract 0 node from %s", input.c_str());
+				return false;
+			}
+
 			if(!Generate3mxb(nodes, resources, output))
 			{
+				seed::log::DumpLog(seed::log::Critical, "Generate %s failed!", output.c_str());
 				return false;
 			}
 
@@ -694,11 +718,6 @@ namespace seed
 
 		bool OsgTo3mx::Generate3mxb(const std::vector<Node>& nodes, const std::vector<Resource>& resources, const std::string& output)
 		{
-			if (nodes.empty())
-			{
-				return false;
-			}
-
 			neb::CJsonObject oJson;
 			oJson.Add("version", 1);
 
@@ -718,6 +737,12 @@ namespace seed
 			uint32_t length = jsonStr.size();
 
 			std::ofstream outfile(output, std::ios::out | std::ios::binary);
+			if (outfile.bad())
+			{
+				seed::log::DumpLog(seed::log::Critical, "Can NOT open file %s!", output.c_str());
+				return false;
+			}
+
 			outfile.write("3MXBO", 5);
 			outfile.write((char*)&length, 4);
 			outfile.write(jsonStr.c_str(), length);
@@ -727,6 +752,11 @@ namespace seed
 				outfile.write(resource.bufferData.data(), resource.bufferData.size());
 			}
 
+			if (outfile.bad())
+			{
+				seed::log::DumpLog(seed::log::Critical, "An error has occurred while writing file %s!", output.c_str());
+				return false;
+			}
 			return true;
 		}
 
