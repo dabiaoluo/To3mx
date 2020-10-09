@@ -562,7 +562,6 @@ namespace seed
 							}
 						}
 					}
-					break; // only convert the first texture
 				}
 				if (!jpeg_buf.empty()) {
 					resTexture.bufferData.reserve(width * height * comp);
@@ -574,6 +573,7 @@ namespace seed
 					v_data.resize(width * height * 3);
 					stbi_write_jpg_to_func(write_buf, &resTexture.bufferData, width, height, 3, v_data.data(), 80);
 				}
+				break; // only convert the first texture
 			}
 		}
 
