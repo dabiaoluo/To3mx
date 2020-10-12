@@ -70,7 +70,9 @@ namespace seed
 			void ParseGeode(const std::string& input, osg::Geode* geode, Node& node, std::vector<Resource>& resourcesGeometry, std::vector<Resource>& resourcesTexture);
 			void ParseGroup(const std::string& input, osg::Group* group, std::vector<Node>& nodes, std::vector<Resource>& resourcesGeometry, std::vector<Resource>& resourcesTexture);
 
-			void GeometryToBuffer(const std::string& input, osg::Geometry* geometry, std::vector<char>& bufferData);
+			int FindGeometryType(osg::Geometry* geometry); // -1: invalid, 0: tri-mesh, 1: point-cloud
+			void GeometryTriMeshToBuffer(const std::string& input, osg::Geometry* geometry, std::vector<char>& bufferData);
+			void GeometryPointCloudToBuffer(const std::string& input, osg::Geometry* geometry, std::vector<char>& bufferData);
 			void TextureToBuffer(const std::string& input, osg::Texture* texture, std::vector<char>& bufferData);
 		};
 	}

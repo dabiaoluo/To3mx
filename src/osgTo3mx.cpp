@@ -381,16 +381,35 @@ namespace seed
 			// handle geometry
 			for (auto g : infoVisitor.geometry_array)
 			{
-				Resource resGeometry;
-				resGeometry.type = "geometryBuffer";
-				resGeometry.format = "ctm";
-				resGeometry.id = "geometry" + std::to_string(resourcesGeometry.size());
-				resGeometry.texture = texture_id_map[infoVisitor.texture_map[g]];
-				resGeometry.bb = bb;
-				GeometryToBuffer(input, g, resGeometry.bufferData);
+				int gl_type = FindGeometryType(g);
+				if (gl_type == 0) // tri-mesh
+				{
+					Resource resGeometry;
+					resGeometry.type = "geometryBuffer";
+					resGeometry.format = "ctm";
+					resGeometry.id = "geometry" + std::to_string(resourcesGeometry.size());
+					if (infoVisitor.texture_map[g])
+					{
+						resGeometry.texture = texture_id_map[infoVisitor.texture_map[g]];
+					}
+					resGeometry.bb = bb;
+					GeometryTriMeshToBuffer(input, g, resGeometry.bufferData);
 
-				resourcesGeometry.emplace_back(resGeometry);
-				node.resources.push_back(resGeometry.id);
+					resourcesGeometry.emplace_back(resGeometry);
+					node.resources.push_back(resGeometry.id);
+				}
+				else if (gl_type == 1) // point-cloud
+				{
+					Resource resGeometry;
+					resGeometry.type = "geometryBuffer";
+					resGeometry.format = "xyz";
+					resGeometry.id = "geometry" + std::to_string(resourcesGeometry.size());
+					resGeometry.bb = bb;
+					GeometryPointCloudToBuffer(input, g, resGeometry.bufferData);
+
+					resourcesGeometry.emplace_back(resGeometry);
+					node.resources.push_back(resGeometry.id);
+				}
 			}
 		}
 
@@ -582,7 +601,10 @@ namespace seed
 			oJson.Add("id", resource.id);
 			if (resource.type == "geometryBuffer")
 			{
-				oJson.Add("texture", resource.texture);
+				if (resource.format == "ctm")
+				{
+					oJson.Add("texture", resource.texture);
+				}
 
 				oJson.AddEmptySubArray("bbMin");
 				oJson["bbMin"].Add(resource.bb.xMin());
@@ -598,7 +620,48 @@ namespace seed
 			return oJson;
 		}
 
-		void OsgTo3mx::GeometryToBuffer(const std::string& input, osg::Geometry* geometry, std::vector<char>& bufferData)
+		int OsgTo3mx::FindGeometryType(osg::Geometry* geometry)
+		{
+			if (geometry->getNumPrimitiveSets() == 0) {
+				return -1;
+			}
+			int type = -1;
+			for (uint32 k = 0; k < geometry->getNumPrimitiveSets(); k++)
+			{
+				osg::PrimitiveSet* ps = geometry->getPrimitiveSet(k);
+				osg::PrimitiveSet::Type t = ps->getType();
+				auto mode = ps->getMode();
+				if (mode == GL_TRIANGLES)
+				{
+					if (k == 0)
+					{
+						type = 0;
+					}
+					else if (type != 0)
+					{
+						type = -1;
+					}
+				}
+				else if (mode == GL_POINTS)
+				{
+					if (k == 0)
+					{
+						type = 1;
+					}
+					else if (type != 1)
+					{
+						type = -1;
+					}
+				}
+				else
+				{
+					type = -1;
+				}
+			}
+			return type;
+		}
+
+		void OsgTo3mx::GeometryTriMeshToBuffer(const std::string& input, osg::Geometry* geometry, std::vector<char>& bufferData)
 		{
 			if (geometry->getNumPrimitiveSets() == 0) {
 				return;
@@ -732,6 +795,59 @@ namespace seed
 			ctm.DefineMesh(aVertices.data(), aVertices.size() / 3, aIndices.data(), aIndices.size() / 3, aNormals.data());
 			ctm.AddUVMap(aUVCoords.data(), nullptr, nullptr);
 			ctm.SaveCustom(_ctm_write_buf, &bufferData);
+		}
+
+		void OsgTo3mx::GeometryPointCloudToBuffer(const std::string& input, osg::Geometry* geometry, std::vector<char>& bufferData)
+		{
+			if (geometry->getNumPrimitiveSets() == 0) {
+				return;
+			}
+
+			std::vector<float> aVertices;
+			std::vector<float> aColors;
+
+			osg::Array* va = geometry->getVertexArray();
+			int vec_size = 0;
+			if (va)
+			{
+				osg::Vec3Array* v3f = (osg::Vec3Array*)va;
+				vec_size = v3f->size();
+				for (int vidx = 0; vidx < vec_size; vidx++)
+				{
+					osg::Vec3f point = v3f->at(vidx);
+					aVertices.push_back(point.x());
+					aVertices.push_back(point.y());
+					aVertices.push_back(point.z());
+				}
+			}
+
+			// color
+			osg::Array* ca = geometry->getColorArray();
+			int color_size;
+			if (ca)
+			{
+				osg::Vec4Array* v4f = (osg::Vec4Array*)ca;
+				color_size = v4f->size();
+				for (int vidx = 0; vidx < color_size; vidx++)
+				{
+					osg::Vec4f point = v4f->at(vidx);
+					aColors.push_back(point.x());
+					aColors.push_back(point.y());
+					aColors.push_back(point.z());
+					aColors.push_back(point.w());
+				}
+			}
+
+			if (vec_size == 0) {
+				return;
+			}
+			if (vec_size != color_size) {
+				return;
+			}
+
+			bufferData.insert(bufferData.end(), (char*)&vec_size, (char*)&vec_size + 4);
+			bufferData.insert(bufferData.end(), (char*)aVertices.data(), (char*)aVertices.data() + 4 * aVertices.size());
+			bufferData.insert(bufferData.end(), (char*)aColors.data(), (char*)aColors.data() + 4 * aColors.size());
 		}
 
 		void OsgTo3mx::TextureToBuffer(const std::string& input, osg::Texture* texture, std::vector<char>& bufferData)
