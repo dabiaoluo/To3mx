@@ -107,12 +107,15 @@ namespace seed
 					seed::log::DumpLog(seed::log::Critical, "Generate %s failed!", output3mxb.c_str());
 					return false;
 				}
-				Node node;
-				node.id = dir;
-				node.bb = bb;
-				node.maxScreenDiameter = 0;
-				node.children.push_back(output3mxbName);
-				nodes.push_back(node);
+				if (bb.valid())
+				{
+					Node node;
+					node.id = dir;
+					node.bb = bb;
+					node.maxScreenDiameter = 0;
+					node.children.push_back(output3mxbName);
+					nodes.push_back(node);
+				}
 
 				{
 					processed++;
