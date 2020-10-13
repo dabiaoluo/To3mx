@@ -331,10 +331,6 @@ namespace seed
 					ParseGeode(input, geode, node, resourcesGeometry, resourcesTexture);
 				}
 			}
-			else
-			{
-				seed::log::DumpLog(seed::log::Warning, "PagedLOD has 0 child in file %s", input.c_str());
-			}
 
 			osg::BoundingBox bb;
 			bb.expandBy(lod->getBound());
@@ -804,7 +800,7 @@ namespace seed
 			}
 
 			std::vector<float> aVertices;
-			std::vector<float> aColors;
+			std::vector<char> aColors;
 
 			osg::Array* va = geometry->getVertexArray();
 			int vec_size = 0;
@@ -831,10 +827,10 @@ namespace seed
 				for (int vidx = 0; vidx < color_size; vidx++)
 				{
 					osg::Vec4f point = v4f->at(vidx);
-					aColors.push_back(point.x());
-					aColors.push_back(point.y());
-					aColors.push_back(point.z());
-					aColors.push_back(point.w());
+					aColors.push_back(char(point.x() * 255));
+					aColors.push_back(char(point.y() * 255));
+					aColors.push_back(char(point.z() * 255));
+					aColors.push_back(char(point.w() * 255));
 				}
 			}
 
@@ -846,8 +842,8 @@ namespace seed
 			}
 
 			bufferData.insert(bufferData.end(), (char*)&vec_size, (char*)&vec_size + 4);
-			bufferData.insert(bufferData.end(), (char*)aVertices.data(), (char*)aVertices.data() + 4 * aVertices.size());
-			bufferData.insert(bufferData.end(), (char*)aColors.data(), (char*)aColors.data() + 4 * aColors.size());
+			bufferData.insert(bufferData.end(), (char*)aVertices.data(), (char*)aVertices.data() + sizeof(float) * aVertices.size());
+			bufferData.insert(bufferData.end(), (char*)aColors.data(), (char*)aColors.data() + sizeof(char) * aColors.size());
 		}
 
 		void OsgTo3mx::TextureToBuffer(const std::string& input, osg::Texture* texture, std::vector<char>& bufferData)
