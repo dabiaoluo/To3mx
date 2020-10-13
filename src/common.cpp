@@ -95,7 +95,7 @@ namespace seed
 		void UpdateProgress(int value)
 		{
 			double elapsed = timer.elapsed();
-			if (value != 0)
+			if (value != 0 && elapsed > 30)
 			{
 				double remaining = elapsed / value * (100 - value);
 				printf("Progress: %d, Time elapsed: %s, Time remaining: %s\n", value, secondToString(elapsed).c_str(), secondToString(remaining).c_str());
