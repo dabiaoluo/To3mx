@@ -2,6 +2,8 @@
 
 - Convert OSGB PagedLOD tree to Bentley ContextCapture [3MX/3MXB](https://docs.bentley.com/LiveContent/web/ContextCapture%20Help-v9/en/GUID-CED0ABE6-2EE3-458D-9810-D87EC3C521BD.html) tree.
 
+This project has moved to [lodToolkit](https://github.com/ProjSEED/lodToolkit)
+
 ### How to use
 ```
 To3mx.exe --input <DIR> --output <DIR>
